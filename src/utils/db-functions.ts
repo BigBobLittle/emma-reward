@@ -9,6 +9,7 @@ class DB {
         this.initializeDatabase();
     }
 
+    // create an sqlite in memory db with relevant table and seed data 
     private initializeDatabase() {
         // Create tables if they don't exist
         this.db.serialize(() => {
@@ -86,13 +87,14 @@ class DB {
         });
     }
 
+    // list all Tradable Assets 
     async listTradableAssets(): Promise<{ tickerSymbol: string }[]> {
         return new Promise<{ tickerSymbol: string }[]>((resolve, reject) => {
             this.db.all('SELECT tickerSymbol FROM TradableAssets', (err, rows) => {
                 if (err) {
                     reject(err);
                 } else {
-                    // Assuming rows is an array of objects with a 'tickerSymbol' property
+                    
                     const assets: { tickerSymbol: string }[] = rows.map((row: any) => ({
                         tickerSymbol: row.tickerSymbol,
                     }));
@@ -102,7 +104,7 @@ class DB {
         });
     }
 
-
+// fetch all records in Rewards table 
     async getRewardsAccountPositions(): Promise<{ tickerSymbol: string, quantity: number, sharePrice: number }[]> {
         return new Promise<{ tickerSymbol: string, quantity: number, sharePrice: number }[]>((resolve, reject) => {
             this.db.all('SELECT * FROM RewardsAccountPositions', (err, rows) => {
@@ -121,7 +123,7 @@ class DB {
         });
     }
 
-    
+    // by new shares into rewards table 
     async buySharesInRewardsAccount(tickerSymbol: string, quantity: number, sharePrice:number): Promise<{ success: boolean }> {
         return new Promise<{ success: boolean }>((resolve, reject) => {
             this.db.run(
@@ -138,10 +140,28 @@ class DB {
         });
     }
     
+    // update the quantity of a share given it's tickerSymbol
+    async updateFirmsAccountWithShares(tickerSymbol: string, quantity: number): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            this.db.run(
+                'UPDATE RewardsAccountPositions SET quantity = quantity - ? WHERE tickerSymbol = ?',
+                [quantity, tickerSymbol],
+                (err) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve();
+                    }
+                }
+            );
+        });
+    }
 
-    async findRecordInRewardAccountPositions(tickerSymbol:string):Promise<ShareDetail>{
-    return new Promise<ShareDetail>((resolve, reject) => {
-     this.db.all('SELECT * FROM RewardsAccountPositions WHERE tickerSymbol = ?', [tickerSymbol], (err, updatedRows:ShareDetail) => {
+
+    // fetch a single record in Rewards table given it's tickerSymbol
+    async findRecordInRewardAccountPositions(tickerSymbol:string):Promise<ShareDetails>{
+    return new Promise<ShareDetails>((resolve, reject) => {
+     this.db.all('SELECT * FROM RewardsAccountPositions WHERE tickerSymbol = ?', [tickerSymbol], (err, updatedRows:ShareDetails) => {
         if (err) {
             this.db.run('ROLLBACK');
             reject(err);
@@ -154,7 +174,26 @@ class DB {
         })
     }
     
+    // decrease the quantity of a specific ticker symbol 
+    decreaseQuantityInRewardsByTickerSymbol(tickerSymbol:string, quantity:number):Promise<void>{
+        return new Promise<void>((_, reject) =>{
+            this.db.run(
+                'UPDATE RewardsAccountPositions SET quantity = quantity - ? WHERE tickerSymbol = ?',
+                [quantity, tickerSymbol],
+                (err) => {
+                    if (err) {
+                        // this.db.run('ROLLBACK');
+                        reject(err);
+                        return;
+                    }})
+        })
+    }
 
+
+/**
+ * description move shares from the firms account to a user account, decrease 
+ * the firms quantity and increase that of the user 
+ */
     async moveSharesFromRewardsAccount(toAccount: string, tickerSymbol: string, quantity: number): Promise<{ success: boolean }> {
         return new Promise<{ success: boolean }>(async (resolve, reject) => {
             try {
@@ -173,7 +212,7 @@ class DB {
     
                        
                         // Fetch the current user shares
-                        this.db.get('SELECT * FROM UserAccounts WHERE userId = ?', [toAccount], (err, row:UpdatedUserAccount|null) => {
+                        this.db.get('SELECT * FROM UserAccounts WHERE userId = ?', [toAccount], async(err, row:UpdatedUserAccount|null) => {
                             if (err) {
                                 this.db.run('ROLLBACK');
                                 reject(err);
@@ -193,11 +232,15 @@ class DB {
                                 if (existingShareIndex !== -1) {
                                     updatedShares[existingShareIndex].quantity += quantity;
                                 } else {
-                                    if (!row.shares) {
-                                        updatedShares = [{ tickerSymbol, quantity, sharePrice: 0 }]; 
+                                    // get latest share price 
+                                     const data = await this.findRecordInRewardAccountPositions(tickerSymbol)
+                                   
+                                     if (!row.shares) {
+                                        updatedShares = [{ tickerSymbol, quantity, sharePrice: data[0].sharePrice }]; 
                                     } else {
-                                        updatedShares.push({ tickerSymbol, quantity, sharePrice: 0 }); 
+                                        updatedShares.push({ tickerSymbol, quantity, sharePrice: data[0].sharePrice }); 
                                     }
+                                   
                                 }
     
                                 // Update the shares in the UserAccounts table
@@ -232,26 +275,10 @@ class DB {
     
     
 
-    async updateFirmsAccountWithShares(tickerSymbol: string, quantity: number): Promise<void> {
-        return new Promise<void>((resolve, reject) => {
-            this.db.run(
-                'UPDATE RewardsAccountPositions SET quantity = quantity - ? WHERE tickerSymbol = ?',
-                [quantity, tickerSymbol],
-                (err) => {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve();
-                    }
-                }
-            );
-        });
-    }
+ 
     
-
-    async  getUserAccountDetails(userId: string): Promise<UserAccount> {
-        // Logic to fetch user account details including shares from the database or API
-        // Example implementation (using a placeholder database query):
+ // Logic to fetch user account details including shares from the database
+    async  getUserAccountDetails(userId: string): Promise<UserAccount> { 
         return new Promise<UserAccount>((resolve, reject) => {
             this.db.get('SELECT * FROM UserAccounts WHERE userId = ?', [userId], (err, row: UserAccount | undefined) => {
                 if (err) {
@@ -261,8 +288,7 @@ class DB {
                         const userAccount: UserAccount = {
                             userId: row.userId,
                             username: row.username,
-                            shares: row.shares, // Fetch shares associated with this user from the database
-                            // Other user-related information if needed
+                            shares: row.shares, 
                         };
                         resolve(userAccount);
                     } else {
@@ -272,71 +298,7 @@ class DB {
             });
         });
     }
-
-     async  updateUsersSharesInDB(userId: string, tickerSymbol: string, quantity: number, rewardValue:number): Promise<UpdatedUserAccount | null> {
-        return new Promise<UpdatedUserAccount | null>((resolve, reject) => {
-            this.db.get('SELECT shares FROM UserAccounts WHERE userId = ?', [userId], async (err, row: UserAccountRow | undefined) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-    
-                if (row && Object.prototype.hasOwnProperty.call(row, 'shares')) {
-                    let updatedShares: ShareDetails[] = [];
-    
-                    if (row.shares) {
-                        const sharesDataFromDB: string = row.shares;
-                        updatedShares = JSON.parse(sharesDataFromDB);
-                    }
-    
-                    const existingShareIndex = updatedShares.findIndex(share => share.tickerSymbol === tickerSymbol);
-    
-                    if (existingShareIndex !== -1) {
-                        updatedShares[existingShareIndex].quantity += quantity;
-                    } else {
-                        if (!row.shares) { // Handle case when shares are initially null
-                            updatedShares = [{ tickerSymbol, quantity, sharePrice: rewardValue }];
-                        } else {
-                            updatedShares.push({ tickerSymbol, quantity, sharePrice: rewardValue });
-                        }
-                    }
-    
-                    this.db.run('UPDATE UserAccounts SET shares = ? WHERE userId = ?', [JSON.stringify(updatedShares), userId], async (err) => {
-                        if (err) {
-                            reject(err);
-                            return;
-                        }
-    
-                        this.db.get('SELECT * FROM UserAccounts WHERE userId = ?', [userId], (err, updatedRow: UserAccountRow | undefined) => {
-                            if (err) {
-                                reject(err);
-                                return;
-                            }
-    
-                            if (updatedRow) {
-                                const updatedUserAccount: UpdatedUserAccount = {
-                                    userId: updatedRow.userId,
-                                    username: updatedRow.username,
-                                    shares: JSON.parse(updatedRow.shares), // Parse the updated shares
-                                    // Other user-related information if needed
-                                };
-                                resolve(updatedUserAccount);
-                            } else {
-                                resolve(null); // User not found after update
-                            }
-                        });
-                    });
-                } else {
-                    resolve(null); // User not found or shares data not available
-                }
-            });
-        });
-    }
-    
-    
-    
-    
-    
+   
     
 }
 

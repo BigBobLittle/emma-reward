@@ -1,54 +1,55 @@
-
-import db from './db-functions';
-
+import db from "./db-functions";
 
 class Broker {
-    
+  constructor() {}
 
-    constructor() {
-       
-        
-    }
+  async listTradableAssets(): Promise<{ tickerSymbol: string }[]> {
+    const tradableAssets = await db.listTradableAssets();
+    return tradableAssets;
+  }
 
-    
+  async getLatestPrice(tickerSymbol: string): Promise<{ sharePrice: number }> {
+    const share = await db.findRecordInRewardAccountPositions(tickerSymbol);
+    console.log({ shareFromBroker: share });
+    return { sharePrice: share[0].sharePrice };
+  }
 
-    async listTradableAssets(): Promise<{ tickerSymbol: string }[]> {
-        const tradableAssets = await db.listTradableAssets()
-        return tradableAssets
-    }
+  async isMarketOpen(): Promise<{ open: boolean }> {
+    // Simulating market status (open for this example)
+    return { open: true };
+  }
 
-    // Todo
-    async getLatestPrice(tickerSymbol: string): Promise<{ sharePrice: number }> {
-        // Simulating fetching the latest price (random for this example)
-        const sharePrice = Math.random() * 100; // Generate a random price
-        return { sharePrice };
-    }
+  async buySharesInRewardsAccount(
+    tickerSymbol: string,
+    quantity: number
+  ): Promise<{ success: boolean }> {
+    const { sharePrice } = await this.getLatestPrice(tickerSymbol);
+    const buyShares = await db.buySharesInRewardsAccount(
+      tickerSymbol,
+      quantity,
+      sharePrice
+    );
+    return buyShares;
+  }
 
-    async isMarketOpen(): Promise<{ open: boolean }> {
-        // Simulating market status (open for this example)
-        return { open: true };
-    }
+  async getRewardsAccountPositions(): Promise<
+    { tickerSymbol: string; quantity: number; sharePrice: number }[]
+  > {
+    return db.getRewardsAccountPositions();
+  }
 
-    async buySharesInRewardsAccount(tickerSymbol: string, quantity: number): Promise<{ success: boolean }> {
-        const {sharePrice} = await this.getLatestPrice(tickerSymbol);
-        const buyShares = await db.buySharesInRewardsAccount(tickerSymbol,quantity,sharePrice)
-        return buyShares;
-        
-    }
-
-    async getRewardsAccountPositions(): Promise<{ tickerSymbol: string, quantity: number, sharePrice: number }[]> {
-        return db.getRewardsAccountPositions()
-    }
-
-    async moveSharesFromRewardsAccount(toAccount: string, tickerSymbol: string, quantity: number): Promise<{ success: boolean }> {
-        const moveShares = await db.moveSharesFromRewardsAccount(toAccount,tickerSymbol,quantity)
-        return moveShares
-        
-    }
-
-   
-    
+  async moveSharesFromRewardsAccount(
+    toAccount: string,
+    tickerSymbol: string,
+    quantity: number
+  ): Promise<{ success: boolean }> {
+    const moveShares = await db.moveSharesFromRewardsAccount(
+      toAccount,
+      tickerSymbol,
+      quantity
+    );
+    return moveShares;
+  }
 }
 
-export default Broker
-
+export default Broker;
