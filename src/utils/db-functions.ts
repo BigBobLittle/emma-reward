@@ -298,7 +298,8 @@ export class DB {
                         };
                         resolve(userAccount);
                     } else {
-                        reject(new Error(`User with ID ${userId} not found`));
+                        
+                        reject( new Error(`User with ID ${userId} not found`));
                     }
                 }
             });

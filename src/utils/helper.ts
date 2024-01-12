@@ -1,7 +1,7 @@
 import *  as dotenv from 'dotenv'
 import BrokerClass from "./broker";
 const Broker = new BrokerClass()
-import { AwardedShare, PopularCompany } from "./interface";
+import { AwardedShare, PopularCompany, ShareDetails } from "./interface";
 
 
 dotenv.config()
@@ -106,5 +106,23 @@ function generateFractionShareRewardValue(): number {
     return clampedFractionalValue;
 }
 
+// format response into proper json 
+function formatResponse(response){
+    
+let data: string | ShareDetails[] = response.shares; 
 
-export {generateRewardValue, rewardUserWithShare}
+
+// Check the type and handle accordingly
+if (typeof data === 'string') {
+    // If it's a string, parse it into an array of ShareDetails
+    const parsedData: ShareDetails[] = JSON.parse(data);
+    return {...response, shares: parsedData}
+    
+} 
+    return response
+
+
+
+}
+
+export {generateRewardValue, rewardUserWithShare, formatResponse}
