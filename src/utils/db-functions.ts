@@ -1,7 +1,7 @@
 import * as sqlite3 from 'sqlite3';
-import { ShareDetail, ShareDetails, UserAccount,UserAccountRow, UpdatedUserAccount} from './interface';
+import {  ShareDetails, UserAccount, UpdatedUserAccount} from './interface';
 
-class DB {
+export class DB {
     private db: sqlite3.Database;
 
     constructor() {
@@ -10,17 +10,17 @@ class DB {
     }
 
     // create an sqlite in memory db with relevant table and seed data 
-    private initializeDatabase() {
-        // Create tables if they don't exist
-        this.db.serialize(() => {
+    private initializeDatabase(): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+          // Create tables if they don't exist
+          this.db.serialize(() => {
             this.db.run(`
                 CREATE TABLE IF NOT EXISTS TradableAssets (
                     id INTEGER PRIMARY KEY,
                     tickerSymbol TEXT NOT NULL
-                    
                 )
             `);
-
+      
             this.db.run(`
                 CREATE TABLE IF NOT EXISTS RewardsAccountPositions (
                     id INTEGER PRIMARY KEY,
@@ -29,63 +29,69 @@ class DB {
                     sharePrice REAL NOT NULL
                 )
             `);
-
+      
             this.db.run(`
                 CREATE TABLE IF NOT EXISTS UserAccounts (
                     userId INTEGER PRIMARY KEY,
                     username TEXT NOT NULL,
                     shares TEXT
-                    
                 )
             `);
-
+      
             // insert default users 
             const baseUsers = [
-                { userId: '1', username: 'user1' },
-                { userId: '2', username: 'user2' }
-                
+              { userId: '1', username: 'user1' },
+              { userId: '2', username: 'user2' }
             ];
-        
+      
             const insertUserStmt = this.db.prepare('INSERT INTO UserAccounts (userId, username) VALUES (?, ?)');
             baseUsers.forEach(user => insertUserStmt.run(user.userId, user.username));
             insertUserStmt.finalize();
-
+      
             // Insert default tradable assets
             const defaultAssets = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA'];
-
+      
             const insertStmt = this.db.prepare('INSERT INTO TradableAssets (tickerSymbol) VALUES (?)');
-            // const insertOrUpdateStmt = this.db.prepare('INSERT OR REPLACE INTO TradableAssets (tickerSymbol, quantity) VALUES (?, COALESCE((SELECT quantity FROM TradableAssets WHERE tickerSymbol = ?), 0) + 1)');
             defaultAssets.forEach((asset) => insertStmt.run(asset));
             insertStmt.finalize();
-
-            // reward accoount position 
+      
+            // reward account position 
             // SQL command to insert seed data into RewardsAccountPositions
             const seedData = [
-                { tickerSymbol: 'AAPL', quantity: 100, sharePrice: 150 },
-                { tickerSymbol: 'GOOGL', quantity: 50, sharePrice: 200 },
-                { tickerSymbol: 'MSFT', quantity: 50, sharePrice: 100 },
-                { tickerSymbol: 'AMZN', quantity: 100, sharePrice: 300 },
-                { tickerSymbol: 'TSLA', quantity: 50, sharePrice: 250 },
-                // Add more seed data for other ticker symbols
+              { tickerSymbol: 'AAPL', quantity: 100, sharePrice: 150 },
+              { tickerSymbol: 'GOOGL', quantity: 50, sharePrice: 200 },
+              { tickerSymbol: 'MSFT', quantity: 50, sharePrice: 100 },
+              { tickerSymbol: 'AMZN', quantity: 100, sharePrice: 300 },
+              { tickerSymbol: 'TSLA', quantity: 50, sharePrice: 250 },
+              // Add more seed data for other ticker symbols
             ];
-
+      
             // Seed the RewardsAccountPositions table with initial data
-            seedData.forEach((data) => {
+            const seedPromises = seedData.map((data) => {
+              return new Promise<void>((seedResolve, seedReject) => {
                 this.db.run(
-                    'INSERT INTO RewardsAccountPositions (tickerSymbol, quantity, sharePrice) VALUES (?, ?, ?)',
-                    [data.tickerSymbol, data.quantity, data.sharePrice],
-                    (err) => {
-                        if (err) {
-                            console.error('Error inserting seed data:', err);
-                        } else {
-                            console.log('Seed data inserted successfully!');
-                        }
+                  'INSERT INTO RewardsAccountPositions (tickerSymbol, quantity, sharePrice) VALUES (?, ?, ?)',
+                  [data.tickerSymbol, data.quantity, data.sharePrice],
+                  (err) => {
+                    if (err) {
+                    //   console.error('Error inserting seed data:', err);
+                      seedReject(err);
+                    } else {
+                    //   console.log('Seed data inserted successfully!');
+                      seedResolve();
                     }
+                  }
                 );
+              });
             });
-
+      
+            Promise.all(seedPromises)
+              .then(() => resolve())
+              .catch((err) => reject(err));
+          });
         });
-    }
+      }
+      
 
     // list all Tradable Assets 
     async listTradableAssets(): Promise<{ tickerSymbol: string }[]> {

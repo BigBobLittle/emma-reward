@@ -10,7 +10,6 @@ class Broker {
 
   async getLatestPrice(tickerSymbol: string): Promise<{ sharePrice: number }> {
     const share = await db.findRecordInRewardAccountPositions(tickerSymbol);
-    console.log({ shareFromBroker: share });
     return { sharePrice: share[0].sharePrice };
   }
 
